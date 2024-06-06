@@ -1,6 +1,13 @@
 // background.js - Handles requests from the UI, runs the model, then sends back a response
 
-import { pipeline, env } from "@xenova/transformers";
+import {
+  pipeline,
+  env,
+  AutoModelForCausalLM,
+  AutoTokenizer,
+  TextStreamer,
+  StoppingCriteria,
+} from "@xenova/transformers";
 
 // Skip initial check for local models, since we are not loading any local models.
 env.allowLocalModels = false;
@@ -8,33 +15,163 @@ env.allowLocalModels = false;
 // Due to a bug in onnxruntime-web, we must disable multithreading for now.
 // See https://github.com/microsoft/onnxruntime/issues/14445 for more information.
 env.backends.onnx.wasm.numThreads = 1;
+// env.backends.onnx.wasm.wasmPaths =
+//   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
+
+class CallbackTextStreamer extends TextStreamer {
+  constructor(tokenizer, cb) {
+    super(tokenizer, {
+      skip_prompt: true,
+      skip_special_tokens: true,
+    });
+    this.cb = cb;
+  }
+
+  on_finalized_text(text) {
+    this.cb(text);
+  }
+}
+
+class InterruptableStoppingCriteria extends StoppingCriteria {
+  constructor() {
+    super();
+    this.interrupted = false;
+  }
+
+  interrupt() {
+    this.interrupted = true;
+  }
+
+  reset() {
+    this.interrupted = false;
+  }
+
+  _call(input_ids, scores) {
+    return new Array(input_ids.length).fill(this.interrupted);
+  }
+}
+
+const stopping_criteria = new InterruptableStoppingCriteria();
+
+async function hasFp16() {
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    console.log("ADAPTER FOUND: ", adapter);
+    return adapter.features.has("shader-f16");
+  } catch (e) {
+    return false;
+  }
+}
 
 class PipelineSingleton {
-  static task = "text-classification";
-  static model = "Xenova/distilbert-base-uncased-finetuned-sst-2-english";
+  static task = "feature-extraction";
+  static model_id = "Xenova/Phi-3-mini-4k-instruct_fp16";
+  static model = null;
   static instance = null;
 
   static async getInstance(progress_callback = null) {
-    if (this.instance === null) {
-      this.instance = pipeline(this.task, this.model, { progress_callback });
-    }
+    //(await hasFp16())
+    this.model_id ??= false
+      ? "Xenova/Phi-3-mini-4k-instruct_fp16"
+      : "Xenova/Phi-3-mini-4k-instruct";
 
-    return this.instance;
+    this.tokenizer ??= AutoTokenizer.from_pretrained(this.model_id, {
+      legacy: true,
+      progress_callback,
+    });
+
+    this.model ??= AutoModelForCausalLM.from_pretrained(this.model_id, {
+      dtype: "q4",
+      device: "webgpu",
+      use_external_data_format: true,
+      progress_callback,
+    });
+
+    return Promise.all([this.tokenizer, this.model]);
   }
+
+  // static async getInstance(progress_callback = null) {
+  //   if (this.instance === null) {
+  //     this.instance = pipeline(this.task, this.model, {
+  //       progress_callback,
+  //       // device: "webgpu",
+  //     });
+  //   }
+
+  //   return this.instance;
+  // }
 }
 
 // Create generic classify function, which will be reused for the different types of events.
 const classify = async (text) => {
   // Get the pipeline instance. This will load and build the model when run for the first time.
-  let model = await PipelineSingleton.getInstance((data) => {
+  const [tokenizer, model] = await PipelineSingleton.getInstance((data) => {
     // You can track the progress of the pipeline creation here.
     // e.g., you can send `data` back to the UI to indicate a progress bar
-    // console.log('progress', data)
+    console.log("progress", data);
+    // data logs as this:
+    /**
+     * 
+     * {
+    "status": "progress",
+    "name": "Xenova/Phi-3-mini-4k-instruct_fp16",
+    "file": "onnx/model_q4.onnx",
+    "progress": 99.80381792394503,
+    "loaded": 836435968,
+    "total": 838080131
+  }
+
+  when complete, last status will be 'done'
+     */
+  });
+  /////////////
+  const inputs = tokenizer.apply_chat_template(text, {
+    add_generation_prompt: true,
+    return_dict: true,
   });
 
+  let startTime;
+  let numTokens = 0;
+  const cb = (output) => {
+    startTime ??= performance.now();
+
+    let tps;
+    if (numTokens++ > 0) {
+      tps = (numTokens / (performance.now() - startTime)) * 1000;
+    }
+    self.postMessage({
+      status: "update",
+      output,
+      tps,
+      numTokens,
+    });
+  };
+
+  const streamer = new CallbackTextStreamer(tokenizer, cb);
+
+  // Tell the main thread we are starting
+  self.postMessage({ status: "start" });
+
+  const outputs = await model.generate({
+    ...inputs,
+    max_new_tokens: 512,
+    streamer,
+    stopping_criteria,
+  });
+  const outputText = tokenizer.batch_decode(outputs, {
+    skip_special_tokens: false,
+  });
+
+  // Send the output back to the main thread
+  self.postMessage({
+    status: "complete",
+    output: outputText,
+  });
+  ///////////////
+
   // Actually run the model on the input text
-  let result = await model(text);
-  return result;
+  // let result = await model(text);
+  // return result;
 };
 
 ////////////////////// 1. Context Menus //////////////////////
