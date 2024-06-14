@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "SuperTab",
+  "name": "AI WebGPU Extension",
   "description": "Transformers.js | Sample browser extension",
   "version": "0.0.1",
   "permissions": [
