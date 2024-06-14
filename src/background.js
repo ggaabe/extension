@@ -70,8 +70,7 @@ class PipelineSingleton {
   static instance = null;
 
   static async getInstance(progress_callback = null) {
-    //(await hasFp16())
-    this.model_id ??= false
+    this.model_id ??= (await hasFp16())
       ? "Xenova/Phi-3-mini-4k-instruct_fp16"
       : "Xenova/Phi-3-mini-4k-instruct";
 

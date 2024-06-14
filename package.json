@@ -18,7 +18,7 @@
   "dependencies": {
     "@xenova/transformers": "github:xenova/transformers.js#v3"
   },
-  "resolutions": {
-    "onnxruntime-web": "1.19.0-dev.20240604-3dd6fcc089"
+  "overrides": {
+    "onnxruntime-web": "1.19.0-dev.20240612-94aa21c3dd"
   }
 }
