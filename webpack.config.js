@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const config = {
   mode: "development",
+  experiments: { outputModule: true },  // This is required to generate ES6 modules
   devtool: "inline-source-map",
   entry: {
     background: "./src/background.js",
@@ -20,6 +21,8 @@ const config = {
     // environment: {
     //   module: true, // Ensure the output is treated as an ES module
     // },
+    library: { type: 'module' },  // This is required to generate ES6 modules
+    chunkFormat: 'module',  // This is required to generate ES6 modules for webworker target
   },
   target: "webworker",
 
@@ -27,6 +30,7 @@ const config = {
     new HtmlWebpackPlugin({
       template: "./src/popup.html",
       filename: "popup.html",
+      scriptLoading: "module"  // fix for ES6 modules
     }),
     new CopyPlugin({
       patterns: [

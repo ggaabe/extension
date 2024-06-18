@@ -14,9 +14,23 @@ env.allowLocalModels = false;
 
 // Due to a bug in onnxruntime-web, we must disable multithreading for now.
 // See https://github.com/microsoft/onnxruntime/issues/14445 for more information.
+//
+// (Note by fs-eire)
+// The issue mentioned above is fixed in the latest version of ORT. However, multi-threading is still not working in service workers, because
+// of a different issue: https://github.com/whatwg/html/issues/8362
 env.backends.onnx.wasm.numThreads = 1;
+
 // env.backends.onnx.wasm.wasmPaths =
 //   "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
+
+// (Note by fs-eire)
+// In this example, the .wasm file is included (and processed/renamed by webpack) in the "build" folder. So we don't need to override the wasm path.
+//
+// However, Transformer.js will set this flag to a CDN path. If we keep the override, the WebAssembly will failed to load because there is a version mismatch.
+// ORT only works when the .wasm file and the .mjs file match (they need to be generated from the same build).
+//
+// So, we need to set this flag to undefined to revert it back to the default behavior.
+env.backends.onnx.wasm.wasmPaths = undefined;
 
 class CallbackTextStreamer extends TextStreamer {
   constructor(tokenizer, cb) {
