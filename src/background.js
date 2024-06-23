@@ -138,11 +138,12 @@ const classify = async (text) => {
      */
   });
   /////////////
-  const inputs = tokenizer.apply_chat_template(text, {
+  console.log("test 1");
+  const inputs = tokenizer.apply_chat_template([text], {
     add_generation_prompt: true,
     return_dict: true,
   });
-
+  console.log("test 2");
   let startTime;
   let numTokens = 0;
   const cb = (output) => {
@@ -152,7 +153,9 @@ const classify = async (text) => {
     if (numTokens++ > 0) {
       tps = (numTokens / (performance.now() - startTime)) * 1000;
     }
-    self.postMessage({
+    // Check if we're in a Web Worker environment
+
+    sendMessage({
       status: "update",
       output,
       tps,
@@ -163,7 +166,8 @@ const classify = async (text) => {
   const streamer = new CallbackTextStreamer(tokenizer, cb);
 
   // Tell the main thread we are starting
-  self.postMessage({ status: "start" });
+
+  sendMessage({ status: "start" });
 
   const outputs = await model.generate({
     ...inputs,
@@ -176,16 +180,33 @@ const classify = async (text) => {
   });
 
   // Send the output back to the main thread
-  self.postMessage({
+
+  sendMessage({
     status: "complete",
     output: outputText,
   });
+
   ///////////////
 
   // Actually run the model on the input text
   // let result = await model(text);
   // return result;
 };
+
+// Helper function to send messages in a service worker environment
+function sendMessage(message) {
+  if ("clients" in self) {
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        client.postMessage(message);
+      });
+    });
+  } else {
+    console.log("Message:", message);
+    // You might want to implement a custom event system or callback here
+    // if this code can also run outside of a service worker context
+  }
+}
 
 ////////////////////// 1. Context Menus //////////////////////
 //
