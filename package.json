@@ -19,6 +19,6 @@
     "@xenova/transformers": "github:xenova/transformers.js#v3"
   },
   "overrides": {
-    "onnxruntime-web": "1.19.0-dev.20240612-94aa21c3dd"
+    "onnxruntime-web": "1.19.0-dev.20240621-69d522f4e9"
   }
 }
