@@ -95,7 +95,7 @@ class PipelineSingleton {
 
     this.model ??= AutoModelForCausalLM.from_pretrained(this.model_id, {
       dtype: "q4",
-      device: "webgpu",
+      device: "wasm",
       use_external_data_format: true,
       progress_callback,
     });
@@ -147,6 +147,7 @@ const classify = async (text) => {
   let startTime;
   let numTokens = 0;
   const cb = (output) => {
+    console.log("CB Output", output);
     startTime ??= performance.now();
 
     let tps;
@@ -253,8 +254,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Run model prediction asynchronously
   (async function () {
     // Perform classification
+    console.log("Classifying");
     let result = await classify(message.text);
-
+    console.log("Classifying result", result);
     // Send response back to UI
     sendResponse(result);
   })();

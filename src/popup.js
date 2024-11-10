@@ -5,6 +5,7 @@
 const inputElement = document.getElementById("text");
 const outputElement = document.getElementById("output");
 const removeDuplicatesBtn = document.getElementById("removeDuplicatesBtn");
+const closeOldTabsBtn = document.getElementById("closeOldTabsBtn");
 
 removeDuplicatesBtn.addEventListener("click", async () => {
   try {
@@ -41,6 +42,55 @@ removeDuplicatesBtn.addEventListener("click", async () => {
   }
 });
 
+closeOldTabsBtn.addEventListener("click", async () => {
+  try {
+    // Get all tabs
+    const allTabs = await chrome.tabs.query({});
+    const currentTime = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    const tabsToClose = [];
+
+    // Filter tabs that are older than 24 hours and not in any groups
+    allTabs.forEach((tab) => {
+      console.log(
+        "last acc",
+        tab.lastAccessed,
+        "current time",
+        currentTime,
+        "diff",
+        currentTime - tab.lastAccessed,
+        "more than 24hr",
+        currentTime - tab.lastAccessed > twentyFourHours,
+        "groupId",
+        tab.groupId,
+        "all true",
+        !tab.groupId &&
+          tab.lastAccessed &&
+          currentTime - tab.lastAccessed > twentyFourHours
+      );
+
+      if (
+        tab.groupId === -1 &&
+        tab.lastAccessed &&
+        currentTime - tab.lastAccessed > twentyFourHours
+      ) {
+        console.log("Pushing", tab.id);
+        tabsToClose.push(tab.id);
+      }
+    });
+
+    if (tabsToClose.length > 0) {
+      await chrome.tabs.remove(tabsToClose);
+      outputElement.innerText = `Closed ${tabsToClose.length} old tab(s).`;
+    } else {
+      outputElement.innerText = "No old tabs to close.";
+    }
+  } catch (error) {
+    console.error("Failed to close old tabs:", error);
+    outputElement.innerText = "Error closing old tabs.";
+  }
+});
+
 // Listen for changes made to the textbox.
 inputElement.addEventListener("input", (event) => {
   // Bundle the input data into a message.
@@ -52,6 +102,7 @@ inputElement.addEventListener("input", (event) => {
   // Send this message to the service worker.
   chrome.runtime.sendMessage(message, (response) => {
     // Handle results returned by the service worker (`background.js`) and update the popup's UI.
+    console.log("Final response");
     outputElement.innerText = JSON.stringify(response, null, 2);
   });
 });
